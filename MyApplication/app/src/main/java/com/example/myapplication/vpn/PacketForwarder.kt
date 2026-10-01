@@ -10,14 +10,15 @@ import java.io.OutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.net.InetSocketAddress
 import java.net.Socket
 
 data class ForwardResult(
     val bytesProcessed: Int,
     val isOfficeTraffic: Boolean,
     val threat: SecurityThreat? = null,
-    val responsePacket: ByteArray? = null
+    val responsePacket: ByteArray? = null,
+    val officeTunnelRouted: Boolean = false,
+    val officeTunnelDropReason: String? = null
 )
 
 object PacketForwarder {
@@ -31,11 +32,12 @@ object PacketForwarder {
         length: Int,
         parsedInfo: ParsedPacketInfo,
         config: VpnConfig,
-        vpnService: VpnService
+        vpnService: VpnService,
+        officeTunnel: OfficeTunnelEngine?
     ): ForwardResult {
         if (parsedInfo.isOfficeSubnet) {
             // Office Traffic Routing logic
-            return routeOfficeTraffic(buffer, length, parsedInfo, config, vpnService)
+            return routeOfficeTraffic(buffer, length, parsedInfo, officeTunnel)
         }
 
         // Non-office traffic inspection & forwarding
@@ -90,28 +92,26 @@ object PacketForwarder {
         buffer: ByteArray,
         length: Int,
         parsedInfo: ParsedPacketInfo,
-        config: VpnConfig,
-        vpnService: VpnService
+        officeTunnel: OfficeTunnelEngine?
     ): ForwardResult {
-        // Relay office subnet packets via protected office gateway socket
-        return try {
-            val socket = Socket()
-            vpnService.protect(socket)
-            socket.soTimeout = 1500
-
-            // Connect to gateway / target in office network
-            socket.connect(InetSocketAddress(parsedInfo.destinationIp, parsedInfo.destinationPort.takeIf { it > 0 } ?: 80), 1500)
-            socket.close()
-
-            ForwardResult(
+        if (officeTunnel == null) {
+            return ForwardResult(
                 bytesProcessed = length,
-                isOfficeTraffic = true
+                isOfficeTraffic = true,
+                officeTunnelDropReason = "No office tunnel engine active for the current engine mode"
             )
-        } catch (e: Exception) {
-            // Logged as office traffic attempt
-            ForwardResult(
+        }
+
+        return when (val result = officeTunnel.routePacket(buffer, length, parsedInfo)) {
+            is OfficeTunnelRouteResult.Routed -> ForwardResult(
                 bytesProcessed = length,
-                isOfficeTraffic = true
+                isOfficeTraffic = true,
+                officeTunnelRouted = true
+            )
+            is OfficeTunnelRouteResult.Dropped -> ForwardResult(
+                bytesProcessed = length,
+                isOfficeTraffic = true,
+                officeTunnelDropReason = result.reason
             )
         }
     }

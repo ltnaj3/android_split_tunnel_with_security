@@ -10,7 +10,9 @@ data class VpnMetrics(
     val dnsQueriesInspected: Long = 0L,
     val blockedPacketsCount: Long = 0L,
     val lastThreatDescription: String? = null,
-    val connectionStartTime: Long? = null
+    val connectionStartTime: Long? = null,
+    val officePacketsDropped: Long = 0L,
+    val lastOfficeDropReason: String? = null
 ) {
     val totalOfficeBytes: Long get() = officeBytesSent + officeBytesReceived
     val totalProcessedBytes: Long get() = totalOfficeBytes + inspectedBytes

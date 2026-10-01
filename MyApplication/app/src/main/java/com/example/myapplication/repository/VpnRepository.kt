@@ -3,6 +3,7 @@ package com.example.myapplication.repository
 import com.example.myapplication.model.DnsQueryLog
 import com.example.myapplication.model.LogEvent
 import com.example.myapplication.model.LogLevel
+import com.example.myapplication.model.OfficeTunnelState
 import com.example.myapplication.model.SecurityThreat
 import com.example.myapplication.model.VpnConfig
 import com.example.myapplication.model.VpnMetrics
@@ -31,6 +32,9 @@ class VpnRepository private constructor() {
 
     private val _dnsQueryLogs = MutableStateFlow<List<DnsQueryLog>>(emptyList())
     val dnsQueryLogs: StateFlow<List<DnsQueryLog>> = _dnsQueryLogs.asStateFlow()
+
+    private val _officeTunnelState = MutableStateFlow<OfficeTunnelState>(OfficeTunnelState.Idle)
+    val officeTunnelState: StateFlow<OfficeTunnelState> = _officeTunnelState.asStateFlow()
 
     fun updateState(newState: VpnState) {
         _vpnState.value = newState
@@ -64,6 +68,33 @@ class VpnRepository private constructor() {
                 officePacketsCount = current.officePacketsCount + packets
             )
         }
+    }
+
+    /**
+     * Records an office-subnet packet that was classified for office routing but could NOT be
+     * forwarded (tunnel not ready, or dataplane unsupported). Used instead of
+     * [recordOfficeTraffic] so metrics/logs never claim traffic was forwarded when it was not.
+     */
+    fun recordOfficeTrafficDropped(bytes: Long, reason: String) {
+        _vpnMetrics.update { current ->
+            current.copy(
+                officePacketsDropped = current.officePacketsDropped + 1,
+                lastOfficeDropReason = reason
+            )
+        }
+        addLog(
+            level = LogLevel.WARN,
+            message = "Office packet dropped (not forwarded)",
+            details = reason
+        )
+    }
+
+    fun updateOfficeTunnelState(newState: OfficeTunnelState) {
+        _officeTunnelState.value = newState
+        addLog(
+            level = if (newState is OfficeTunnelState.Failed) LogLevel.ERROR else LogLevel.INFO,
+            message = "Office tunnel state changed to: ${newState.displayName}"
+        )
     }
 
     fun recordInspectedPacket(bytes: Long, isDns: Boolean = false) {
