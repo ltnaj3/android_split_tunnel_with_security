@@ -3,6 +3,7 @@ package com.example.myapplication.ui.viewmodel
 import com.example.myapplication.model.DnsQueryLog
 import com.example.myapplication.model.LogEvent
 import com.example.myapplication.model.LogLevel
+import com.example.myapplication.model.OfficeTunnelState
 import com.example.myapplication.model.SecurityThreat
 import com.example.myapplication.model.VpnConfig
 import com.example.myapplication.model.VpnMetrics
@@ -12,6 +13,7 @@ data class VpnUiState(
     val vpnState: VpnState = VpnState.Disconnected,
     val vpnConfig: VpnConfig = VpnConfig(),
     val vpnMetrics: VpnMetrics = VpnMetrics(),
+    val officeTunnelState: OfficeTunnelState = OfficeTunnelState.Idle,
     val threatEvents: List<SecurityThreat> = emptyList(),
     val logEvents: List<LogEvent> = emptyList(),
     val dnsQueryLogs: List<DnsQueryLog> = emptyList(),

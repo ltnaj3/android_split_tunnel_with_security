@@ -7,6 +7,7 @@ import com.example.myapplication.model.DnsQueryLog
 import com.example.myapplication.model.Ikev2AuthType
 import com.example.myapplication.model.LogEvent
 import com.example.myapplication.model.LogLevel
+import com.example.myapplication.model.OfficeTunnelState
 import com.example.myapplication.model.SecurityThreat
 import com.example.myapplication.model.SubnetConfig
 import com.example.myapplication.model.ThreatSeverity
@@ -49,6 +50,7 @@ class VpnViewModel(
         repository.vpnState,
         repository.vpnConfig,
         repository.vpnMetrics,
+        repository.officeTunnelState,
         repository.threatEvents,
         repository.logEvents,
         repository.dnsQueryLogs,
@@ -62,23 +64,25 @@ class VpnViewModel(
         val vpnState = values[0] as VpnState
         val vpnConfig = values[1] as VpnConfig
         val vpnMetrics = values[2] as VpnMetrics
+        val officeTunnelState = values[3] as OfficeTunnelState
         @Suppress("UNCHECKED_CAST")
-        val threatEvents = values[3] as List<SecurityThreat>
+        val threatEvents = values[4] as List<SecurityThreat>
         @Suppress("UNCHECKED_CAST")
-        val logEvents = values[4] as List<LogEvent>
+        val logEvents = values[5] as List<LogEvent>
         @Suppress("UNCHECKED_CAST")
-        val dnsQueryLogs = values[5] as List<DnsQueryLog>
-        val selectedTab = values[6] as Int
-        val isSimulatingTraffic = values[7] as Boolean
-        val formattedUptime = values[8] as String
-        val searchQuery = values[9] as String
-        val selectedLogLevelFilter = values[10] as LogLevel?
-        val errorMessage = values[11] as String?
+        val dnsQueryLogs = values[6] as List<DnsQueryLog>
+        val selectedTab = values[7] as Int
+        val isSimulatingTraffic = values[8] as Boolean
+        val formattedUptime = values[9] as String
+        val searchQuery = values[10] as String
+        val selectedLogLevelFilter = values[11] as LogLevel?
+        val errorMessage = values[12] as String?
 
         VpnUiState(
             vpnState = vpnState,
             vpnConfig = vpnConfig,
             vpnMetrics = vpnMetrics,
+            officeTunnelState = officeTunnelState,
             threatEvents = threatEvents,
             logEvents = logEvents,
             dnsQueryLogs = dnsQueryLogs,

@@ -36,6 +36,7 @@ class OfficeVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var packetLoopJob: Job? = null
     private var isRunning = false
+    private var officeTunnel: OfficeTunnelEngine? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -62,15 +63,6 @@ class OfficeVpnService : VpnService() {
 
         startForegroundServiceNotification(config)
 
-        // Provision Native IKEv2 Profile if selected or hybrid mode
-        if (config.engineMode == VpnEngineMode.NATIVE_IKEV2_IPSEC || config.engineMode == VpnEngineMode.HYBRID_SPLIT_TUNNEL) {
-            val provisioned = Ikev2Manager.provisionProfile(this, config)
-            if (provisioned) {
-                repository.addLog(LogLevel.INFO, "Native IKEv2/IPSec profile provisioned with VpnManager")
-                Ikev2Manager.startProvisionedSession(this)
-            }
-        }
-
         serviceScope.launch {
             try {
                 val pfd = establishVpnInterface(config)
@@ -86,6 +78,18 @@ class OfficeVpnService : VpnService() {
                     "Office VPN Service connected [Engine: ${config.engineMode.displayName}]"
                 )
 
+                // Negotiate the office IKEv2/IPsec control-plane session using Android's
+                // built-in IKE library (android.net.ipsec.ike). This OfficeVpnService TUN
+                // remains the single, app-owned VPN interface on the device -- we intentionally
+                // do NOT provision/start a VpnManager-owned Ikev2VpnProfile (see Ikev2Manager),
+                // since that would create a second, competing VPN tunnel owner and would remove
+                // this app's ability to inspect non-office traffic.
+                if (config.engineMode == VpnEngineMode.NATIVE_IKEV2_IPSEC ||
+                    config.engineMode == VpnEngineMode.HYBRID_SPLIT_TUNNEL
+                ) {
+                    startOfficeTunnel(config)
+                }
+
                 startPacketLoop(pfd, config)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -93,6 +97,13 @@ class OfficeVpnService : VpnService() {
                 stopVpnSession()
             }
         }
+    }
+
+    private fun startOfficeTunnel(config: VpnConfig) {
+        if (officeTunnel != null) return
+        val tunnel = IpsecOfficeTunnel(applicationContext, repository)
+        officeTunnel = tunnel
+        tunnel.start(config)
     }
 
     private fun establishVpnInterface(config: VpnConfig): ParcelFileDescriptor? {
@@ -193,15 +204,24 @@ class OfficeVpnService : VpnService() {
                                     length = bytesRead,
                                     parsedInfo = parsed,
                                     config = config,
-                                    vpnService = this@OfficeVpnService
+                                    vpnService = this@OfficeVpnService,
+                                    officeTunnel = officeTunnel
                                 )
 
                                 if (forwardResult.isOfficeTraffic) {
-                                    repository.recordOfficeTraffic(
-                                        bytesSent = bytesRead.toLong(),
-                                        bytesReceived = 0L,
-                                        packets = 1L
-                                    )
+                                    if (forwardResult.officeTunnelRouted) {
+                                        repository.recordOfficeTraffic(
+                                            bytesSent = bytesRead.toLong(),
+                                            bytesReceived = 0L,
+                                            packets = 1L
+                                        )
+                                    } else {
+                                        repository.recordOfficeTrafficDropped(
+                                            bytes = bytesRead.toLong(),
+                                            reason = forwardResult.officeTunnelDropReason
+                                                ?: "Office packet not forwarded (unknown reason)"
+                                        )
+                                    }
                                 } else {
                                     repository.recordInspectedPacket(
                                         bytes = bytesRead.toLong(),
@@ -247,6 +267,9 @@ class OfficeVpnService : VpnService() {
 
         packetLoopJob?.cancel()
         packetLoopJob = null
+
+        officeTunnel?.stop()
+        officeTunnel = null
 
         try {
             vpnInterface?.close()

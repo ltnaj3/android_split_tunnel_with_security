@@ -11,6 +11,26 @@ import com.example.myapplication.model.Ikev2AuthType
 import com.example.myapplication.model.VpnConfig
 import java.nio.charset.StandardCharsets
 
+/**
+ * DEPRECATED RUNTIME PATH -- NOT CALLED by [OfficeVpnService] anymore.
+ *
+ * [VpnManager.provisionVpnProfile] + [VpnManager.startProvisionedVpnProfileSession] hand the
+ * *entire device VPN tunnel* to an OS-owned profile. That conflicts with this app's
+ * single-owner architecture, where [OfficeVpnService] (an app-owned `VpnService`) is meant to be
+ * the one and only active VPN interface so that non-office traffic can still be locally
+ * inspected/blocked. Starting a provisioned VpnManager session here would silently create a
+ * second, competing VPN owner and would remove visibility into non-office packets entirely.
+ *
+ * The office IKEv2/IPsec control-plane negotiation now lives in [IkeSessionController] /
+ * [IpsecOfficeTunnel], which use the lower-level `android.net.ipsec.ike` library instead and do
+ * not take ownership of the TUN interface.
+ *
+ * This object is retained only for [createIkev2Profile]/[checkVpnPermission], which may still be
+ * useful for a possible future "full-tunnel, no local inspection" fallback mode. Its
+ * [provisionProfile]/[startProvisionedSession] functions MUST NOT be wired into the active
+ * runtime connect path.
+ */
+@Deprecated("VpnManager-owned profile sessions conflict with the single app-owned VpnService architecture. Use IkeSessionController/IpsecOfficeTunnel instead.")
 object Ikev2Manager {
 
     /**
